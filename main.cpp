@@ -66,36 +66,51 @@ int main() {
 
     {
         alignas(User) std::byte storage[2 * sizeof(User)];
+
+        // Free slots are tracked by index. The valid stack range is
+        // free_indices[0..free_count), with the top at free_count - 1.
         std::size_t free_indices[2] = {1, 0};
         std::size_t free_count = 2;
 
+        // Convert a slot index into the byte address where a User can live.
         auto raw = [&](std::size_t index) -> std::byte* {
             return storage + index * sizeof(User);
         };
 
-        std::size_t index_a = free_indices[--free_count];
+        // Pop a free slot index in O(1).
+        auto pop_free_index = [&]() -> std::size_t {
+            assert(free_count > 0);
+            return free_indices[--free_count];
+        };
+
+        // Push a slot index back after the object in that slot is destroyed.
+        auto push_free_index = [&](std::size_t index) {
+            assert(free_count < 2);
+            free_indices[free_count++] = index;
+        };
+
+        std::size_t index_a = pop_free_index();
         User* a = new (raw(index_a)) User{"A"};
 
-        std::size_t index_b = free_indices[--free_count];
+        std::size_t index_b = pop_free_index();
         User* b = new (raw(index_b)) User{"B"};
 
         assert(free_count == 0);
 
         a->~User();
-        free_indices[free_count++] = index_a;
+        push_free_index(index_a);
 
-        std::size_t index_c = free_indices[--free_count];
+        std::size_t index_c = pop_free_index();
         User* c = new (raw(index_c)) User{"C"};
 
         assert(index_c == index_a);
         assert(static_cast<void*>(c) == static_cast<void*>(a));
 
         b->~User();
-        free_indices[free_count++] = index_b;
+        push_free_index(index_b);
 
         c->~User();
-        free_indices[free_count++] = index_c;
-
+        push_free_index(index_c);
         assert(free_count == 2);
     }
 
