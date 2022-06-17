@@ -89,28 +89,42 @@ int main() {
             free_indices[free_count++] = index;
         };
 
-        std::size_t index_a = pop_free_index();
-        User* a = new (raw(index_a)) User{"A"};
+        auto index_from_pointer = [&](User* p) -> std::size_t {
+            auto* bytes = reinterpret_cast<std::byte*>(p);
+            auto offset = bytes - storage;
 
-        std::size_t index_b = pop_free_index();
-        User* b = new (raw(index_b)) User{"B"};
+            assert(offset >= 0);
+
+            auto byte_offset = static_cast<std::size_t>(offset);
+            assert(byte_offset < 2 * sizeof(User));
+            assert(byte_offset % sizeof(User) == 0);
+
+            return byte_offset / sizeof(User);
+        };
+
+        auto create_user = [&](std::string name) -> User* {
+            std::size_t index = pop_free_index();
+            return new (raw(index)) User(std::move(name));
+        };
+
+        auto destroy_user = [&](User* p) {
+            std::size_t index = index_from_pointer(p);
+            p->~User();
+            push_free_index(index);
+        };
+
+        User* a = create_user("A");
+        User* b = create_user("B");
 
         assert(free_count == 0);
 
-        a->~User();
-        push_free_index(index_a);
+        destroy_user(a);
 
-        std::size_t index_c = pop_free_index();
-        User* c = new (raw(index_c)) User{"C"};
-
-        assert(index_c == index_a);
+        User* c = create_user("C");
         assert(static_cast<void*>(c) == static_cast<void*>(a));
 
-        b->~User();
-        push_free_index(index_b);
-
-        c->~User();
-        push_free_index(index_c);
+        destroy_user(b);
+        destroy_user(c);
         assert(free_count == 2);
     }
 
