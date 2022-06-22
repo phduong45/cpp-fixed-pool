@@ -103,6 +103,10 @@ int main() {
         };
 
         auto create_user = [&](std::string name) -> User* {
+            if (free_count == 0) {
+                return nullptr;
+            }
+
             std::size_t index = pop_free_index();
             return new (raw(index)) User(std::move(name));
         };
@@ -118,9 +122,13 @@ int main() {
 
         assert(free_count == 0);
 
+        User* full = create_user("full");
+        assert(full == nullptr);
+
         destroy_user(a);
 
         User* c = create_user("C");
+        assert(c != nullptr);
         assert(static_cast<void*>(c) == static_cast<void*>(a));
 
         destroy_user(b);
