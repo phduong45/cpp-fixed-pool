@@ -14,6 +14,76 @@ struct User {
     ~User() { std::cout << "destroy " << name_ << "\n"; }
 };
 
+class UserPool2 {
+  private:
+    static constexpr std::size_t capacity_ = 2;
+
+    alignas(User) std::byte storage_[capacity_ * sizeof(User)];
+    std::size_t free_indices_[capacity_];
+    std::size_t free_count_;
+
+    std::byte* raw(std::size_t index) noexcept {
+        return storage_ + index * sizeof(User);
+    }
+
+    std::size_t pop_free_index() noexcept {
+        assert(free_count_ > 0);
+        return free_indices_[--free_count_];
+    }
+
+    void push_free_index(std::size_t index) noexcept {
+        assert(free_count_ < capacity_);
+        free_indices_[free_count_++] = index;
+    }
+
+    std::size_t index_from_pointer(User* p) const noexcept {
+        auto* bytes = reinterpret_cast<std::byte*>(p);
+        auto offset = bytes - storage_;
+        assert(offset >= 0);
+
+        auto byte_offset = static_cast<std::size_t>(offset);
+        assert(byte_offset < capacity_ * sizeof(User));
+        assert(byte_offset % sizeof(User) == 0);
+
+        return byte_offset / sizeof(User);
+    }
+
+  public:
+    UserPool2() : free_count_{capacity_} {
+        for (std::size_t i = 0; i < capacity_; ++i) {
+            free_indices_[i] = capacity_ - 1 - i;
+        }
+    }
+
+    ~UserPool2() { assert(in_use() == 0); }
+
+    UserPool2(const UserPool2&) = delete;
+    UserPool2& operator=(const UserPool2&) = delete;
+    UserPool2(UserPool2&&) = delete;
+    UserPool2& operator=(UserPool2&&) = delete;
+
+    User* create(std::string name) {
+        if (free_count_ == 0) {
+            return nullptr;
+        }
+
+        std::size_t index = pop_free_index();
+        return new (raw(index)) User(std::move(name));
+    }
+
+    void destroy(User* p) noexcept {
+        std::size_t index = index_from_pointer(p);
+        p->~User();
+        push_free_index(index);
+    }
+
+    static constexpr std::size_t capacity() noexcept { return capacity_; }
+
+    std::size_t available() const noexcept { return free_count_; }
+
+    std::size_t in_use() const noexcept { return capacity_ - free_count_; }
+};
+
 int main() {
     {
         // Ordinary new allocates storage and constructs the object.
@@ -134,6 +204,36 @@ int main() {
         destroy_user(b);
         destroy_user(c);
         assert(free_count == 2);
+    }
+
+    {
+        UserPool2 pool;
+
+        assert(pool.capacity() == 2);
+        assert(pool.available() == 2);
+        assert(pool.in_use() == 0);
+
+        User* a = pool.create("A");
+        User* b = pool.create("B");
+        User* full = pool.create("full");
+
+        assert(a != nullptr);
+        assert(b != nullptr);
+        assert(full == nullptr);
+        assert(pool.available() == 0);
+        assert(pool.in_use() == 2);
+
+        pool.destroy(a);
+
+        User* c = pool.create("C");
+        assert(c != nullptr);
+        assert(static_cast<void*>(c) == static_cast<void*>(a));
+
+        pool.destroy(b);
+        pool.destroy(c);
+
+        assert(pool.available() == 2);
+        assert(pool.in_use() == 0);
     }
 
     return 0;
