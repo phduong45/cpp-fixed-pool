@@ -15,6 +15,8 @@ struct User {
 };
 
 template <class T, std::size_t N> class FixedPool {
+    static_assert(N > 0, "FixedPool capacity must be greater than zero");
+
   private:
     static constexpr std::size_t capacity_ = N;
 
