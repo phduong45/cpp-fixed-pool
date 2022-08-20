@@ -14,16 +14,16 @@ struct User {
     ~User() { std::cout << "destroy " << name_ << "\n"; }
 };
 
-class UserPool2 {
+template <class T> class UserPool2 {
   private:
     static constexpr std::size_t capacity_ = 2;
 
-    alignas(User) std::byte storage_[capacity_ * sizeof(User)];
+    alignas(T) std::byte storage_[capacity_ * sizeof(T)];
     std::size_t free_indices_[capacity_];
     std::size_t free_count_;
 
     std::byte* raw(std::size_t index) noexcept {
-        return storage_ + index * sizeof(User);
+        return storage_ + index * sizeof(T);
     }
 
     std::size_t pop_free_index() noexcept {
@@ -36,16 +36,16 @@ class UserPool2 {
         free_indices_[free_count_++] = index;
     }
 
-    std::size_t index_from_pointer(User* p) const noexcept {
+    std::size_t index_from_pointer(T* p) const noexcept {
         auto* bytes = reinterpret_cast<std::byte*>(p);
         auto offset = bytes - storage_;
         assert(offset >= 0);
 
         auto byte_offset = static_cast<std::size_t>(offset);
-        assert(byte_offset < capacity_ * sizeof(User));
-        assert(byte_offset % sizeof(User) == 0);
+        assert(byte_offset < capacity_ * sizeof(T));
+        assert(byte_offset % sizeof(T) == 0);
 
-        return byte_offset / sizeof(User);
+        return byte_offset / sizeof(T);
     }
 
   public:
@@ -62,18 +62,18 @@ class UserPool2 {
     UserPool2(UserPool2&&) = delete;
     UserPool2& operator=(UserPool2&&) = delete;
 
-    User* create(std::string name) {
+    T* create(std::string name) {
         if (free_count_ == 0) {
             return nullptr;
         }
 
         std::size_t index = pop_free_index();
-        return new (raw(index)) User(std::move(name));
+        return new (raw(index)) T(std::move(name));
     }
 
-    void destroy(User* p) noexcept {
+    void destroy(T* p) noexcept {
         std::size_t index = index_from_pointer(p);
-        p->~User();
+        p->~T();
         push_free_index(index);
     }
 
@@ -207,7 +207,7 @@ int main() {
     }
 
     {
-        UserPool2 pool;
+        UserPool2<User> pool;
 
         assert(pool.capacity() == 2);
         assert(pool.available() == 2);
