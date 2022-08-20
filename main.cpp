@@ -14,9 +14,9 @@ struct User {
     ~User() { std::cout << "destroy " << name_ << "\n"; }
 };
 
-template <class T> class FixedPool2 {
+template <class T, std::size_t N> class FixedPool {
   private:
-    static constexpr std::size_t capacity_ = 2;
+    static constexpr std::size_t capacity_ = N;
 
     alignas(T) std::byte storage_[capacity_ * sizeof(T)];
     std::size_t free_indices_[capacity_];
@@ -49,18 +49,18 @@ template <class T> class FixedPool2 {
     }
 
   public:
-    FixedPool2() : free_count_{capacity_} {
+    FixedPool() : free_count_{capacity_} {
         for (std::size_t i = 0; i < capacity_; ++i) {
             free_indices_[i] = capacity_ - 1 - i;
         }
     }
 
-    ~FixedPool2() { assert(in_use() == 0); }
+    ~FixedPool() { assert(in_use() == 0); }
 
-    FixedPool2(const FixedPool2&) = delete;
-    FixedPool2& operator=(const FixedPool2&) = delete;
-    FixedPool2(FixedPool2&&) = delete;
-    FixedPool2& operator=(FixedPool2&&) = delete;
+    FixedPool(const FixedPool&) = delete;
+    FixedPool& operator=(const FixedPool&) = delete;
+    FixedPool(FixedPool&&) = delete;
+    FixedPool& operator=(FixedPool&&) = delete;
 
     T* create(std::string name) {
         if (free_count_ == 0) {
@@ -207,7 +207,7 @@ int main() {
     }
 
     {
-        FixedPool2<User> pool;
+        FixedPool<User, 2> pool;
 
         assert(pool.capacity() == 2);
         assert(pool.available() == 2);
@@ -234,6 +234,25 @@ int main() {
 
         assert(pool.available() == 2);
         assert(pool.in_use() == 0);
+    }
+
+    {
+        FixedPool<User, 3> pool;
+
+        User* a = pool.create("A");
+        User* b = pool.create("B");
+        User* c = pool.create("C");
+        User* full = pool.create("full");
+
+        assert(a != nullptr);
+        assert(b != nullptr);
+        assert(c != nullptr);
+        assert(full == nullptr);
+        assert(pool.in_use() == 3);
+
+        pool.destroy(a);
+        pool.destroy(b);
+        pool.destroy(c);
     }
 
     return 0;
