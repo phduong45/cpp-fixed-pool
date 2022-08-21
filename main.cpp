@@ -3,6 +3,7 @@
 #include <iostream>
 #include <new>
 #include <string>
+#include <utility>
 
 struct User {
     std::string name_;
@@ -12,6 +13,13 @@ struct User {
     }
 
     ~User() { std::cout << "destroy " << name_ << "\n"; }
+};
+
+struct Widget {
+    int id;
+    std::string label;
+
+    Widget(int id, std::string label) : id{id}, label{std::move(label)} {}
 };
 
 template <class T, std::size_t N> class FixedPool {
@@ -64,13 +72,13 @@ template <class T, std::size_t N> class FixedPool {
     FixedPool(FixedPool&&) = delete;
     FixedPool& operator=(FixedPool&&) = delete;
 
-    T* create(std::string name) {
+    template <class... Args> T* create(Args&&... args) {
         if (free_count_ == 0) {
             return nullptr;
         }
 
         std::size_t index = pop_free_index();
-        return new (raw(index)) T(std::move(name));
+        return new (raw(index)) T(std::forward<Args>(args)...);
     }
 
     void destroy(T* p) noexcept {
@@ -255,6 +263,27 @@ int main() {
         pool.destroy(a);
         pool.destroy(b);
         pool.destroy(c);
+    }
+
+    {
+        FixedPool<Widget, 2> pool;
+
+        Widget* first = pool.create(42, "worker");
+        Widget* second = pool.create(7, std::string{"listener"});
+
+        assert(first != nullptr);
+        assert(second != nullptr);
+
+        assert(first->id == 42);
+        assert(first->label == "worker");
+
+        assert(second->id == 7);
+        assert(second->label == "listener");
+
+        pool.destroy(first);
+        pool.destroy(second);
+
+        assert(pool.in_use() == 0);
     }
 
     return 0;
