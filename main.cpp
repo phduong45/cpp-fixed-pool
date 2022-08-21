@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <iostream>
 #include <new>
+#include <stdexcept>
 #include <string>
 #include <utility>
 
@@ -20,6 +21,10 @@ struct Widget {
     std::string label;
 
     Widget(int id, std::string label) : id{id}, label{std::move(label)} {}
+};
+
+struct ThrowingWidget {
+    ThrowingWidget() { throw std::runtime_error{"construction failed"}; }
 };
 
 template <class T, std::size_t N> class FixedPool {
@@ -78,7 +83,12 @@ template <class T, std::size_t N> class FixedPool {
         }
 
         std::size_t index = pop_free_index();
-        return new (raw(index)) T(std::forward<Args>(args)...);
+        try {
+            return new (raw(index)) T(std::forward<Args>(args)...);
+        } catch (...) {
+            push_free_index(index);
+            throw;
+        }
     }
 
     void destroy(T* p) noexcept {
@@ -283,6 +293,19 @@ int main() {
         pool.destroy(first);
         pool.destroy(second);
 
+        assert(pool.in_use() == 0);
+    }
+
+    {
+        FixedPool<ThrowingWidget, 1> pool;
+
+        try {
+            pool.create();
+            assert(false);
+        } catch (const std::runtime_error&) {
+        }
+
+        assert(pool.available() == 1);
         assert(pool.in_use() == 0);
     }
 
