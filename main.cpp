@@ -36,6 +36,7 @@ template <class T, std::size_t N> class FixedPool {
     alignas(T) std::byte storage_[capacity_ * sizeof(T)];
     std::size_t free_indices_[capacity_];
     std::size_t free_count_;
+    bool occupied_[capacity_]{};
 
     std::byte* raw(std::size_t index) noexcept {
         return storage_ + index * sizeof(T);
@@ -84,7 +85,9 @@ template <class T, std::size_t N> class FixedPool {
 
         std::size_t index = pop_free_index();
         try {
-            return new (raw(index)) T(std::forward<Args>(args)...);
+            T* object = new (raw(index)) T(std::forward<Args>(args)...);
+            occupied_[index] = true;
+            return object;
         } catch (...) {
             push_free_index(index);
             throw;
@@ -93,7 +96,9 @@ template <class T, std::size_t N> class FixedPool {
 
     void destroy(T* p) noexcept {
         std::size_t index = index_from_pointer(p);
+        assert(occupied_[index] && "destroy called for a non-live slot");
         p->~T();
+        occupied_[index] = false;
         push_free_index(index);
     }
 
