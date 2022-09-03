@@ -126,6 +126,7 @@ int main() {
 
         User* full = create_user("full");
         assert(full == nullptr);
+        (void)full;
 
         destroy_user(a);
 

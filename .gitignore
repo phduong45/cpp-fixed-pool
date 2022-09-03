@@ -1,5 +1,7 @@
 main
 main_asan
+main_debug
+main_release
 test_fixed_pool
 test_fixed_pool_asan
 *.dSYM/
