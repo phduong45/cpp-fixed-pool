@@ -1,3 +1,5 @@
 main
-scratch/main
+main_asan
+test_fixed_pool
+test_fixed_pool_asan
 *.dSYM/
