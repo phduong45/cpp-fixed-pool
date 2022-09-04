@@ -15,7 +15,10 @@ class FixedPool {
     alignas(T) std::byte storage_[capacity_ * sizeof(T)];
     std::size_t free_indices_[capacity_];
     std::size_t free_count_;
+
+#ifndef NDEBUG
     bool occupied_[capacity_]{};
+#endif
 
     std::byte* raw(std::size_t index) noexcept {
         return storage_ + index * sizeof(T);
@@ -68,7 +71,9 @@ class FixedPool {
         std::size_t index = pop_free_index();
         try {
             T* object = new (raw(index)) T(std::forward<Args>(args)...);
+#ifndef NDEBUG
             occupied_[index] = true;
+#endif
             return object;
         } catch (...) {
             push_free_index(index);
@@ -78,9 +83,17 @@ class FixedPool {
 
     void destroy(T* p) noexcept {
         std::size_t index = index_from_pointer(p);
+
+#ifndef NDEBUG
         assert(occupied_[index] && "destroy called for a non-live slot");
+#endif
+
         p->~T();
+
+#ifndef NDEBUG
         occupied_[index] = false;
+#endif
+
         push_free_index(index);
     }
 
