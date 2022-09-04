@@ -28,6 +28,33 @@ struct ThrowingWidget {
     }
 };
 
+struct LifetimeTracked {
+    int& live_count;
+
+    explicit LifetimeTracked(int& count) : live_count{count} {
+        ++live_count;
+    }
+
+    ~LifetimeTracked() {
+        --live_count;
+    }
+
+    LifetimeTracked(const LifetimeTracked&) = delete;
+    LifetimeTracked& operator=(const LifetimeTracked&) = delete;
+};
+
+struct MoveOnly {
+    int value;
+
+    explicit MoveOnly(int value) : value{value} {
+    }
+
+    MoveOnly(const MoveOnly&) = delete;
+    MoveOnly& operator=(const MoveOnly&) = delete;
+    MoveOnly(MoveOnly&&) = default;
+    MoveOnly& operator=(MoveOnly&&) = default;
+};
+
 void test_initial_state_and_exhaustion() {
     FixedPool<User, 2> pool;
 
@@ -120,6 +147,35 @@ void test_constructor_exception_rolls_back_slot() {
     assert(pool.in_use() == 0);
 }
 
+void test_object_lifetime() {
+    int live_count = 0;
+    FixedPool<LifetimeTracked, 2> pool;
+
+    auto* first = pool.create(live_count);
+    auto* second = pool.create(live_count);
+
+    assert(first != nullptr);
+    assert(second != nullptr);
+    assert(live_count == 2);
+
+    pool.destroy(first);
+    assert(live_count == 1);
+
+    pool.destroy(second);
+    assert(live_count == 0);
+}
+
+void test_move_only_type() {
+    FixedPool<MoveOnly, 1> pool;
+
+    auto* object = pool.create(42);
+
+    assert(object != nullptr);
+    assert(object->value == 42);
+
+    pool.destroy(object);
+}
+
 } // namespace
 
 int main() {
@@ -128,4 +184,6 @@ int main() {
     test_generic_capacity();
     test_perfect_forwarding();
     test_constructor_exception_rolls_back_slot();
+    test_object_lifetime();
+    test_move_only_type();
 }
